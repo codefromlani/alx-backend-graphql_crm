@@ -1,15 +1,9 @@
-import graphene
-
-class CRMQuery(graphene.ObjectType):
-    hello = graphene.String(default_value="Hello, GraphQL!")
-
 import re
 import graphene
 from graphene_django import DjangoObjectType
 from django.db import transaction
 from django.core.exceptions import ValidationError
 from crm.models import Customer, Product, Order
-
 
 # -------------------- TYPES --------------------
 class CustomerType(DjangoObjectType):
@@ -31,7 +25,6 @@ class OrderType(DjangoObjectType):
 
 
 # -------------------- MUTATIONS --------------------
-
 class CreateCustomer(graphene.Mutation):
     class Arguments:
         name = graphene.String(required=True)
@@ -42,14 +35,10 @@ class CreateCustomer(graphene.Mutation):
     message = graphene.String()
 
     def mutate(self, info, name, email, phone=None):
-        # Email uniqueness check
         if Customer.objects.filter(email=email).exists():
             raise ValidationError("Email already exists")
-
-        # Phone format validation
         if phone and not re.match(r'^(\+?\d{7,15}|(\d{3}-\d{3}-\d{4}))$', phone):
             raise ValidationError("Invalid phone format")
-
         customer = Customer.objects.create(name=name, email=email, phone=phone)
         return CreateCustomer(customer=customer, message="Customer created successfully.")
 
@@ -74,15 +63,12 @@ class BulkCreateCustomers(graphene.Mutation):
 
                 if not name or not email:
                     raise ValidationError("Name and email are required")
-
                 if Customer.objects.filter(email=email).exists():
                     raise ValidationError(f"Email {email} already exists")
-
                 if phone and not re.match(r'^(\+?\d{7,15}|(\d{3}-\d{3}-\d{4}))$', phone):
                     raise ValidationError(f"Invalid phone format for {email}")
 
                 customers.append(Customer(name=name, email=email, phone=phone))
-
             except ValidationError as e:
                 errors.append(str(e))
 
@@ -103,7 +89,6 @@ class CreateProduct(graphene.Mutation):
             raise ValidationError("Price must be positive.")
         if stock < 0:
             raise ValidationError("Stock cannot be negative.")
-
         product = Product.objects.create(name=name, price=price, stock=stock)
         return CreateProduct(product=product)
 
@@ -137,27 +122,25 @@ class CreateOrder(graphene.Mutation):
         return CreateOrder(order=order)
 
 
-# -------------------- QUERY & MUTATION ROOT --------------------
+# -------------------- QUERY --------------------
+class Query(graphene.ObjectType):
+    all_customers = graphene.List(CustomerType)
+    all_products = graphene.List(ProductType)
+    all_orders = graphene.List(OrderType)
 
-class CRMQuery(graphene.ObjectType):
-    hello = graphene.String(default_value="Hello, GraphQL!")
-    customers = graphene.List(CustomerType)
-    products = graphene.List(ProductType)
-    orders = graphene.List(OrderType)
-
-    def resolve_customers(root, info):
+    def resolve_all_customers(root, info):
         return Customer.objects.all()
 
-    def resolve_products(root, info):
+    def resolve_all_products(root, info):
         return Product.objects.all()
 
-    def resolve_orders(root, info):
+    def resolve_all_orders(root, info):
         return Order.objects.all()
 
 
+# -------------------- MUTATION --------------------
 class Mutation(graphene.ObjectType):
     create_customer = CreateCustomer.Field()
     bulk_create_customers = BulkCreateCustomers.Field()
     create_product = CreateProduct.Field()
     create_order = CreateOrder.Field()
-
