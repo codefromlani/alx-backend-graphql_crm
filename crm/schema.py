@@ -1,9 +1,11 @@
 import re
 import graphene
 from graphene_django import DjangoObjectType
+from graphene_django.filter import DjangoFilterConnectionField
 from django.db import transaction
 from django.core.exceptions import ValidationError
 from crm.models import Customer, Product, Order
+from crm.filters import CustomerFilter, ProductFilter, OrderFilter
 
 # -------------------- TYPES --------------------
 class CustomerType(DjangoObjectType):
@@ -22,6 +24,25 @@ class OrderType(DjangoObjectType):
     class Meta:
         model = Order
         fields = ("id", "customer", "products", "total_amount", "order_date")
+
+
+class CustomerNode(DjangoObjectType):
+    class Meta:
+        model = Customer
+        interfaces = (graphene.relay.Node,)
+        filterset_class = CustomerFilter
+
+class ProductNode(DjangoObjectType):
+    class Meta:
+        model = Product
+        interfaces = (graphene.relay.Node,)
+        filterset_class = ProductFilter
+
+class OrderNode(DjangoObjectType):
+    class Meta:
+        model = Order
+        interfaces = (graphene.relay.Node,)
+        filterset_class = OrderFilter
 
 
 # -------------------- MUTATIONS --------------------
@@ -125,6 +146,10 @@ class CreateOrder(graphene.Mutation):
         order.save()
         order.products.set(products)
         return CreateOrder(order=order)
+    
+
+class Mutation(graphene.ObjectType):
+    pass  # existing mutations remain unchanged
 
 
 # -------------------- QUERY --------------------
@@ -132,6 +157,10 @@ class Query(graphene.ObjectType):
     all_customers = graphene.List(CustomerType)
     all_products = graphene.List(ProductType)
     all_orders = graphene.List(OrderType)
+
+    all_customers = DjangoFilterConnectionField(CustomerNode)
+    all_products = DjangoFilterConnectionField(ProductNode)
+    all_orders = DjangoFilterConnectionField(OrderNode)
 
     def resolve_all_customers(root, info):
         return Customer.objects.all()
