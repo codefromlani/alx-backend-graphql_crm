@@ -40,6 +40,7 @@ class CreateCustomer(graphene.Mutation):
         if phone and not re.match(r'^(\+?\d{7,15}|(\d{3}-\d{3}-\d{4}))$', phone):
             raise ValidationError("Invalid phone format")
         customer = Customer.objects.create(name=name, email=email, phone=phone)
+        customer.save()
         return CreateCustomer(customer=customer, message="Customer created successfully.")
 
 
@@ -52,7 +53,7 @@ class BulkCreateCustomers(graphene.Mutation):
 
     @transaction.atomic
     def mutate(self, info, input):
-        customers = []
+        customers_to_create = []
         errors = []
 
         for data in input:
@@ -68,11 +69,15 @@ class BulkCreateCustomers(graphene.Mutation):
                 if phone and not re.match(r'^(\+?\d{7,15}|(\d{3}-\d{3}-\d{4}))$', phone):
                     raise ValidationError(f"Invalid phone format for {email}")
 
-                customers.append(Customer(name=name, email=email, phone=phone))
+                customer = Customer(name=name, email=email, phone=phone)
+                customers_to_create.append(customer)
             except ValidationError as e:
                 errors.append(str(e))
 
-        created_customers = Customer.objects.bulk_create(customers)
+        created_customers = []
+        for c in customers_to_create:
+            c.save()
+            created_customers.append(c)
         return BulkCreateCustomers(customers=created_customers, errors=errors)
 
 
@@ -89,7 +94,8 @@ class CreateProduct(graphene.Mutation):
             raise ValidationError("Price must be positive.")
         if stock < 0:
             raise ValidationError("Stock cannot be negative.")
-        product = Product.objects.create(name=name, price=price, stock=stock)
+        product = Product(name=name, price=price, stock=stock)
+        product.save()
         return CreateProduct(product=product)
 
 
@@ -115,9 +121,8 @@ class CreateOrder(graphene.Mutation):
             raise ValidationError("One or more product IDs are invalid.")
 
         total_amount = sum([p.price for p in products])
-        order = Order.objects.create(
-            customer=customer, total_amount=total_amount, order_date=order_date
-        )
+        order = Order(customer=customer, total_amount=total_amount, order_date=order_date)
+        order.save()
         order.products.set(products)
         return CreateOrder(order=order)
 
