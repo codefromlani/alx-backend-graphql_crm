@@ -4,6 +4,7 @@ backoff==2.2.1
 certifi==2025.10.5
 charset-normalizer==3.4.4
 Django==5.2.7
+django-crontab==0.7.1
 django-filter==25.2
 gql==4.0.0
 graphene==3.4.3
