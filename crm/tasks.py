@@ -1,50 +1,53 @@
-import os
-from datetime import datetime
-import logging
-from gql import gql, Client
-from gql.transport.requests import RequestsHTTPTransport
+import requests
+import datetime
 from celery import shared_task
 
 @shared_task
 def generate_crm_report():
-    # Setup GraphQL client
-    transport = RequestsHTTPTransport(
-        url="http://localhost:8000/graphql/",
-        verify=False,
-        retries=3,
-    )
-    client = Client(transport=transport, fetch_schema_from_transport=True)
-
-    # GraphQL query
-    query = gql("""
+    """
+    Generate a weekly CRM report by querying the GraphQL endpoint
+    and logging total customers, orders, and revenue.
+    """
+    query = """
     query {
         allCustomers {
             totalCount
         }
         allOrders {
             totalCount
+            edges {
+                node {
+                    totalAmount
+                }
+            }
         }
     }
-    """)
+    """
 
     try:
-        result = client.execute(query)
+        # Send the GraphQL query
+        response = requests.post(
+            "http://127.0.0.1:8000/graphql",
+            json={"query": query},
+            timeout=10,
+        )
 
-        total_customers = result.get("allCustomers", {}).get("totalCount", 0)
-        total_orders = result.get("allOrders", {}).get("totalCount", 0)
+        if response.status_code != 200:
+            log_message = f"{datetime.datetime.now()} - FAILED: HTTP {response.status_code}\n"
+        else:
+            data = response.json().get("data", {})
+            total_customers = data.get("allCustomers", {}).get("totalCount", 0)
+            orders = data.get("allOrders", {}).get("edges", [])
+            total_orders = len(orders)
+            total_revenue = sum(order["node"]["totalAmount"] for order in orders if order["node"]["totalAmount"])
 
-        # Calculate total revenue via Django ORM (simpler + safer)
-        from crm.models import Order
-        total_revenue = sum(o.total_amount for o in Order.objects.all())
+            log_message = (
+                f"{datetime.datetime.now():%Y-%m-%d %H:%M:%S} - "
+                f"Report: {total_customers} customers, {total_orders} orders, {total_revenue} revenue\n"
+            )
 
-        # Log to file
-        log_path = "/tmp/crm_report_log.txt"
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        report_line = f"{timestamp} - Report: {total_customers} customers, {total_orders} orders, {total_revenue} revenue\n"
-
-        with open(log_path, "a") as log_file:
-            log_file.write(report_line)
-
-        logging.info("CRM report generated successfully.")
     except Exception as e:
-        logging.error(f"Error generating CRM report: {e}")
+        log_message = f"{datetime.datetime.now()} - ERROR: {str(e)}\n"
+
+    with open("/tmp/crm_report_log.txt", "a") as f:
+        f.write(log_message)
