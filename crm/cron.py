@@ -1,15 +1,12 @@
 import datetime
-import requests
 from gql import gql, Client
 from gql.transport.requests import RequestsHTTPTransport
 
-
-def log_crm_heartbeat():
-    """Log CRM heartbeat with optional GraphQL check."""
+def update_low_stock():
+    """Run GraphQL mutation to restock low-stock products and log results."""
     timestamp = datetime.datetime.now().strftime("%d/%m/%Y-%H:%M:%S")
-    log_file = "/tmp/crm_heartbeat_log.txt"
+    log_file = "/tmp/low_stock_updates_log.txt"
 
-    # Try querying GraphQL hello field
     try:
         transport = RequestsHTTPTransport(
             url="http://localhost:8000/graphql/",
@@ -17,12 +14,26 @@ def log_crm_heartbeat():
             retries=3,
         )
         client = Client(transport=transport, fetch_schema_from_transport=True)
-        query = gql("{ hello }")
-        response = client.execute(query)
-        message = f"CRM is alive (GraphQL OK: {response.get('hello', '')})"
-    except Exception as e:
-        message = f"CRM is alive (GraphQL ERROR: {e})"
+        mutation = gql("""
+            mutation {
+                updateLowStockProducts {
+                    products {
+                        name
+                        stock
+                    }
+                    message
+                }
+            }
+        """)
+        response = client.execute(mutation)
+        products = response["updateLowStockProducts"]["products"]
+        message = response["updateLowStockProducts"]["message"]
 
-    # Append log entry
+        log_message = f"{timestamp} {message}\n"
+        for p in products:
+            log_message += f" - {p['name']}: {p['stock']}\n"
+    except Exception as e:
+        log_message = f"{timestamp} ERROR: {e}\n"
+
     with open(log_file, "a") as f:
-        f.write(f"{timestamp} {message}\n")
+        f.write(log_message)

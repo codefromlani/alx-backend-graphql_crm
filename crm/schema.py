@@ -32,11 +32,13 @@ class CustomerNode(DjangoObjectType):
         interfaces = (graphene.relay.Node,)
         filterset_class = CustomerFilter
 
+
 class ProductNode(DjangoObjectType):
     class Meta:
         model = Product
         interfaces = (graphene.relay.Node,)
         filterset_class = ProductFilter
+
 
 class OrderNode(DjangoObjectType):
     class Meta:
@@ -146,18 +148,35 @@ class CreateOrder(graphene.Mutation):
         order.save()
         order.products.set(products)
         return CreateOrder(order=order)
-    
 
-class Mutation(graphene.ObjectType):
-    pass  # existing mutations remain unchanged
+
+# -------------------- NEW MUTATION: UpdateLowStockProducts --------------------
+class UpdateLowStockProducts(graphene.Mutation):
+    class Arguments:
+        pass  # no inputs
+
+    products = graphene.List(ProductType)
+    message = graphene.String()
+
+    def mutate(self, info):
+        low_stock_products = Product.objects.filter(stock__lt=10)
+        updated_products = []
+
+        for product in low_stock_products:
+            product.stock += 10
+            product.save()
+            updated_products.append(product)
+
+        message = (
+            "Low stock products restocked successfully."
+            if updated_products
+            else "No low stock products found."
+        )
+        return UpdateLowStockProducts(products=updated_products, message=message)
 
 
 # -------------------- QUERY --------------------
 class Query(graphene.ObjectType):
-    all_customers = graphene.List(CustomerType)
-    all_products = graphene.List(ProductType)
-    all_orders = graphene.List(OrderType)
-
     all_customers = DjangoFilterConnectionField(CustomerNode)
     all_products = DjangoFilterConnectionField(ProductNode)
     all_orders = DjangoFilterConnectionField(OrderNode)
@@ -172,9 +191,10 @@ class Query(graphene.ObjectType):
         return Order.objects.all()
 
 
-# -------------------- MUTATION --------------------
+# -------------------- MUTATION ROOT --------------------
 class Mutation(graphene.ObjectType):
     create_customer = CreateCustomer.Field()
     bulk_create_customers = BulkCreateCustomers.Field()
     create_product = CreateProduct.Field()
     create_order = CreateOrder.Field()
+    update_low_stock_products = UpdateLowStockProducts.Field()
